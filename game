@@ -1,0 +1,209 @@
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Random;
+import java.util.Scanner;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+
+public class Main {
+
+    public static void main(String[] args) {
+        RequestData data = new RequestData("https://www.ef.edu/english-resources/english-vocabulary/top-1000-words/");
+
+        if (data.get_connection() == null)
+            System.exit(-1);
+
+        ArrayList<String> words = parse_data(data.jsoup_parse_data());
+        String random_word = get_random_word(words);
+        HangMan hangman = new HangMan(random_word);
+        hangman.start_game();
+
+    }
+
+    private static String get_random_word(ArrayList<String> words) {
+        return words.get(new Random().nextInt(words.size()));
+    }
+
+    private static ArrayList<String> parse_data(Document doc) {
+        ArrayList<String> arr = new ArrayList<>();
+        Element ele = doc.selectFirst("div.field-items").select("p").get(1);
+        String[] split = ele.text().split(" ");
+        Collections.addAll(arr, split);
+        return arr;
+    }
+
+}
+
+class HangMan {
+    private String word_to_guess;
+    private ArrayList<Character> correct_guesses;
+    private ArrayList<Character> letters_seen;
+    private final String hang_man = "HANGMAN";
+    private int hang_man_counter;
+
+    public HangMan(String word_to_guess) {
+        this.correct_guesses = new ArrayList<>();
+        this.letters_seen = new ArrayList<>();
+        this.word_to_guess = word_to_guess;
+        this.hang_man_counter = 0;
+        init_array_list();
+    }
+
+    public void start_game() {
+        System.out.println("[+] Welcome to hangman\n");
+        String correct_guesses_str = array_list_to_string(this.correct_guesses);
+
+        while ((this.hang_man_counter < this.hang_man.length()) &&
+                !(check_two_strings_equal(correct_guesses_str, this.word_to_guess))) {
+            char let = get_letter();
+
+            if (char_in_word(let, this.word_to_guess)) {
+                place_let_in_correct_guesses(let);
+            }
+
+            else {
+                System.out.println(">>>>>>BUZZ<<<<<<<<<");
+                this.hang_man_counter++;
+            }
+
+            this.letters_seen.add(let);
+            System.out.println(array_list_to_string(this.correct_guesses));
+            print_missing_letters();
+            print_hangman();
+            correct_guesses_str = array_list_to_string(this.correct_guesses);
+        }
+
+        if (hang_man_counter == this.hang_man.length())
+            System.out.println("\n[!] You lost! The word was: " + this.word_to_guess);
+        else
+            System.out.println("\n[+] You won!");
+    }
+
+    private char get_letter() {
+        Scanner sc = new Scanner(System.in);
+        System.out.print("\nEnter your next letter to guess >> ");
+        return sc.next().charAt(0);
+    }
+
+    private boolean char_in_word(char c, String word) {
+        for (int i = 0; i < word.length(); i++) {
+            if (word.charAt(i) == c)
+                return true;
+        }
+
+        return false;
+    }
+
+    private boolean check_two_strings_equal(String str1, String str2) {
+        return str1.equals(str2);
+    }
+
+    private String array_list_to_string(ArrayList<Character> arr) {
+        String str = arr.toString();
+        str = String.join("", str.substring(1, str.length() - 1).split(","));
+        return String.join("", str.split(" "));
+    }
+
+    private void print_missing_letters() {
+        String str = array_list_to_string(this.letters_seen);
+        System.out.println("Missing letters -> " + String.join(" ", str));
+    }
+
+    private void print_hangman() {
+        int i = 0;
+
+        while (i < this.hang_man.length()) {
+            char c;
+
+            if (i < this.hang_man_counter)
+                c = this.hang_man.charAt(i);
+            else
+                c = '-';
+
+            System.out.print(c);
+            i++;
+        }
+
+    }
+
+    private void place_let_in_correct_guesses(char c) {
+        for (int i = 0; i < this.word_to_guess.length(); i++) {
+            if (this.word_to_guess.charAt(i) == c)
+                correct_guesses.set(i, c);
+        }
+    }
+
+    private void init_array_list() {
+        for (int i = 0; i < this.word_to_guess.length(); i++)
+            this.correct_guesses.add('-');
+    }
+}
+
+class RequestData {
+    private String url_name;
+    private HttpURLConnection connection;
+    private StringBuffer response_content;
+
+    public RequestData(String url_name) {
+        this.url_name = url_name;
+        this.response_content = new StringBuffer();
+        make_connection();
+    }
+
+    private void make_connection() {
+        try {
+            URL url = new URL(url_name);
+            this.connection = (HttpURLConnection) url.openConnection();
+            this.connection.setRequestMethod("GET");
+            this.connection.setConnectTimeout(5000);
+            this.connection.setReadTimeout(5000);
+
+            if (this.connection.getResponseCode() == 200)
+                read_buffer(this.connection);
+            else
+                this.response_content = null;
+
+        } catch (MalformedURLException e) {
+            System.out.println("[!] URL doesnt work");
+           this.connection = null;
+        }
+        catch (IOException e) {
+            System.out.println("[!] Could not make a connection");
+            this.connection = null;
+        }
+    }
+
+    private void read_buffer(HttpURLConnection conn) throws IOException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        String line;
+
+        while ((line = reader.readLine()) != null) {
+            this.response_content.append(line);
+        }
+        reader.close();
+    }
+
+    public Document jsoup_parse_data() {
+        return Jsoup.parse(this.response_content.toString());
+    }
+
+    public StringBuffer get_response_content() {
+        return this.response_content;
+    }
+
+    public String get_url_name() {
+        return this.url_name;
+    }
+
+    public HttpURLConnection get_connection() {
+        return this.connection;
+    }
+}
